@@ -15,7 +15,7 @@ import datetime, pytz
 # In[ ]:
 
 
-# %pip install mke_clientlib
+# %pip install mke_client
 
 
 # <span style="color:red">**Import the client library**</span>
@@ -23,7 +23,7 @@ import datetime, pytz
 # In[ ]:
 
 
-from mke_clientlib.rimlib import Experiment, get_utcnow
+from mke_client.rimlib import Experiment, get_utcnow
 
 
 # ___
