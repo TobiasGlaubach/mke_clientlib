@@ -15,7 +15,10 @@ Installing
 Usage
 =====
 
-.. code-block:: bash
+.. code-block:: python
 
-    >>> from mke_clientlib.mke_rimlib import Experiment Analysis
+    >>> from mke_clientlib.rimlib import Experiment Analysis
     >>> remote_analysis = Analysis(my_dbserver_url, my_id)
+
+See also `examples/example_experiment` for an full example on how to build test scripts using this library
+
