@@ -1,0 +1,27 @@
+# general things to ignore
+build/
+dist/
+*.egg-info/
+*.egg
+*.py[cod]
+__pycache__/
+*.so
+*~
+~*
+
+
+# due to using tox and pytest
+.tox
+.cache
+
+
+*.vscode*
+*.ipynb_checkpoints
+*.sqlite
+
+*untitled.*
+*Untitled.*
+__old*
+
+*old.ipynb
+*prototyping.ipynb
