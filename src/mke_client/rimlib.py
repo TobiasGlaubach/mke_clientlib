@@ -188,8 +188,8 @@ class __RimObj():
         me = self.__get()
         tstart = parse_zulutime(me['start_condition'])
         assert tstart is not None, '"start_condition" could not be parsed. Got: {} {}'.format(type(me['start_condition']), me['start_condition'])
-        t_is = datetime.datetime.utcnow()
-        t_end_req = tstart + datetime.timedelta(hours=me['duration_expected_hr_dec'])
+        t_is = get_utcnow()
+        t_end_req = tstart + datetime.timedelta(hours=float(me['duration_expected_hr_dec']))
         t_rem = (t_end_req - t_is).total_seconds() / 60.0 / 60.0
         return max(0, t_rem)
 
