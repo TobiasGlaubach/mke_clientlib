@@ -135,7 +135,7 @@ class __RimObj():
             dict: the database entry row associated with this objects id as dictionary
         """
         assert new_status in allowed_status_codes or ignore_enum, "the given status was not within the allowed status strings: allowed are: " + ', '.join(allowed_status_codes.keys())
-        return self.__patch(self.id, dict(status=new_status))
+        return self.__patch(dict(status=new_status))
 
 
     def set_status_cancelling(self) -> dict:
@@ -338,7 +338,15 @@ class Experiment(__RimObj):
         if not start_time:
             start_time = make_zulustr(get_utcnow())
 
-        extensions = {k:v for k, v in devices_to_add.items()}
+        if isinstance(devices_to_add, str):
+            extensions = {devices_to_add: '.csv'}
+        elif isinstance(devices_to_add, list) and len(devices_to_add) > 0 and isinstance(devices_to_add[0], str):
+            extensions = {{k: '.csv'} for k in devices_to_add}
+        elif isinstance(devices_to_add, list) and len(devices_to_add) > 0 and len(devices_to_add[0]) == 2:
+            extensions = dict(devices_to_add)
+        else:
+            extensions = {k:v for k, v in devices_to_add.items()}
+
         if 'ACU' not in extensions:
             extensions['ACU'] ='.csv'
 
@@ -385,9 +393,19 @@ class Experiment(__RimObj):
         Returns:
             aux_files (list): auxiliary files as list of tuples with (key, id, path)
         """
+
+        if isinstance(devices_to_add, str):
+            extensions = {devices_to_add: '.csv'}
+        elif isinstance(devices_to_add, list) and len(devices_to_add) > 0 and isinstance(devices_to_add[0], str):
+            extensions = {{k: '.csv'} for k in devices_to_add}
+        elif isinstance(devices_to_add, list) and len(devices_to_add) > 0 and len(devices_to_add[0]) == 2:
+            extensions = dict(devices_to_add)
+        else:
+            extensions = devices_to_add
+
         payload = {
-            'id': self.exp.id, 
-            'extensions':devices_to_add
+            'id': self.id, 
+            'extensions': extensions
             }
 
         response = requests.post(self.uri + '/register_exp_aux_files', json=payload)
