@@ -23,7 +23,7 @@ import datetime, pytz
 # In[ ]:
 
 
-from mke_client.rimlib import Experiment, get_utcnow
+from mke_client.rimlib import Experiment, get_utcnow, make_zulustr
 
 
 # ___
@@ -34,7 +34,7 @@ from mke_client.rimlib import Experiment, get_utcnow
 
 # In[ ]:
 
-
+n_ticks_max = np.inf
 ticklen = 10
 
 param1 = 5 # test paramaeter 1
@@ -160,7 +160,7 @@ def finish(t_elapsed):
 # In[ ]:
 
 
-t_start = get_utc_now()
+t_start = get_utcnow()
 print(make_zulustr(get_utcnow()) + ' | Starting...')
 
 tickcount = 0
@@ -182,7 +182,7 @@ while tickcount < n_ticks_max:
         break
         
     # get the start time...
-    t_start_iter = get_utc_now()
+    t_start_iter = get_utcnow()
     
     
     # ---------------------------------------
@@ -206,7 +206,7 @@ while tickcount < n_ticks_max:
     print(make_zulustr(get_utcnow()) + f' | completed tick {tickcount} ...')
     
         
-t_end = get_utc_now()
+t_end = get_utcnow()
 t_elapsed = t_start - t_end
 
 
