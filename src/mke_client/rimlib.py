@@ -5,13 +5,28 @@ MeerKAT Extension (MKE)
 interface library for accessing remote experiment and analysis data in a dbserver
 """
 
+import copy
 import requests
-import re
+
 import datetime
-import dateutil
-import pytz
+
 import os
 import json
+
+import logging
+import sys
+
+_log = logging.getLogger()
+streamHandler = logging.StreamHandler(sys.stdout)
+streamHandler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+_log.addHandler(streamHandler)
+
+from mke_client.helpers import get_utcnow, make_zulustr, parse_zulutime
+import mke_client.filesys_storage_api as filesys
+
+
+
+
 
 allowed_status_codes = {
 
@@ -34,47 +49,7 @@ allowed_status_codes = {
 }
 
 
-def get_utcnow():
-    """get current UTC date and time as datetime.datetime object timezone aware"""
-    return datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
-
-def make_zulustr(dtobj:datetime.datetime, remove_ms = True) -> str:
-    '''datetime.datetime object to ISO zulu style string
-    will set tzinfo to utc
-    will replace microseconds with 0 if remove_ms is given
-
-    Args:
-        dtobj (datetime.datetime): the datetime object to parse
-        remove_ms (bool, optional): will replace microseconds with 0 if True . Defaults to True.
-
-    Returns:
-        str: zulu style string e.G. 
-            if remove_ms: 
-                "2022-06-09T10:05:21Z"
-            else:
-                "2022-06-09T10:05:21.123456Z"
-    '''
-    utc = dtobj.replace(tzinfo=pytz.utc)
-    if remove_ms:
-        utc = utc.replace(microsecond=0)
-    return utc.isoformat().replace('+00:00','') + 'Z'
-
-def parse_zulutime(s:str)->datetime.datetime:
-    '''will parse a zulu style string to a datetime.datetime object. Allowed are
-        "2022-06-09T10:05:21.123456Z"
-        "2022-06-09T10:05:21Z" --> Microseconds set to zero
-        "2022-06-09Z" --> Time set to "00:00:00.000000"
-    '''
-    try:
-        if re.match(r'[0-9]{4}-[0-9]{2}-[0-9]{2}Z', s) is not None:
-            s = s[:-1] + 'T00:00:00Z'
-        return dateutil.parser.isoparse(s).replace(tzinfo=pytz.utc)
-    except Exception:
-        return None
-
-
-
-class __RimObj():
+class BaseRimObj():
     """base object to have the Analysis and Experiment 
     classes inherit from
     """
@@ -88,28 +63,33 @@ class __RimObj():
         """this objects associated table name"""
         return self.__tablename
 
-    def __get(self, tablename=None, id=None):
+    def get(self, tablename=None, id=None, **kwargs):
         if id is None:
             id = self.id
         if tablename is None:
             tablename = self.tablename
-        r = requests.get(f'{self.uri}/{tablename}/{id}')
+        r = requests.get(f'{self.uri}/{tablename}/{id}', **kwargs)
         assert r.status_code  == 200, r.text
         return r.json()
 
-    def __patch(self, dc):
-        r = requests.patch(f'{self.uri}/{self.tablename}/{self.id}', json=dc)
+    def patch_me(self, **kwargs):
+        r = requests.patch(f'{self.uri}/{self.tablename}/{self.id}', **kwargs)
+        assert r.status_code < 300, r.text
+        return r.json()
+
+    def post(self, route, **kwargs):
+        r = requests.post(f'{self.uri}/{route}', **kwargs)
         assert r.status_code < 300, r.text
         return r.json()
 
     def get_me(self) -> dict:
         """returns the database entry row associated with this objects id as dictionary"""
-        return self.__get()
+        return self.get()
 
     def get_my_antenna(self) -> dict:
         """returns the antenna entry row associated with this objects antenna_id as dictionary"""
-        me = self.__get() 
-        return self.__get('antennas', me['antenna_id'])
+        me = self.get() 
+        return self.get('antennas', me['antenna_id'])
 
     def set_status(self, new_status:str, ignore_enum=False) -> dict:
         """set a new status to my object in the DB and return the updated 
@@ -135,7 +115,7 @@ class __RimObj():
             dict: the database entry row associated with this objects id as dictionary
         """
         assert new_status in allowed_status_codes or ignore_enum, "the given status was not within the allowed status strings: allowed are: " + ', '.join(allowed_status_codes.keys())
-        return self.__patch(dict(status=new_status))
+        return self.patch_me(json=dict(status=new_status))
 
 
     def set_status_cancelling(self) -> dict:
@@ -172,7 +152,7 @@ class __RimObj():
         Returns:
             bool: true if cancel was requested, false if not
         """
-        me = self.__get()
+        me = self.get()
         assert me['status'] in allowed_status_codes, 'ERROR! The remote status ' + me['status'] + ' is unrecognized'
         return allowed_status_codes[me['status']] >= 100 or me['status'] == 'CANCELLING'
 
@@ -185,7 +165,7 @@ class __RimObj():
         Returns:
             float: the remaining time in hours for this script to run
         """
-        me = self.__get()
+        me = self.get()
         tstart = parse_zulutime(me['start_condition'])
         assert tstart is not None, '"start_condition" could not be parsed. Got: {} {}'.format(type(me['start_condition']), me['start_condition'])
         if t_is is None:
@@ -197,23 +177,12 @@ class __RimObj():
 
 
         
-    
-    # def add_auxfile_to_datafile(self, datafile_path=None, datafile_id=None):
-    #     if datafile_id is None and datafile_path:
-    #         where = f'path="{datafile_path}" AND parent_id={self.id}' 
-    #         r = requests.get(self.uri + '/select', params={'tablename':'aux_files', 'where': where})
-    #         r.raise_for_status()
-    #         rows = r.json()
-    #         assert len(rows) > 0, "the datafile you are trying to add to was not found within the file object"
-    #         datafile_id = 
-    #     elif datafile_id is not None:
 
 
 
 
 
-
-class Experiment(__RimObj):
+class Experiment(BaseRimObj):
     """An interface object to get access to experiments in the 
     database.
 
@@ -235,11 +204,23 @@ class Experiment(__RimObj):
         if uri is None:
             uri = os.environ.get('DBSERVER_URI')
         assert uri, 'need to give a valid URI for a DB connection!'
+
         super().__init__(uri, self.__tablename, id)
 
+    def ping_test(self):
+        """will ping the DB server and fallback to local if necessary
+        """
+        try:
+            r = requests.get(f'{self.uri}/ping', timeout=2)
+            return r.status_code <= 200
+        except Exception as err:
+            _log.error('Error while pinging: ' + str(err))
+            return False
+
+        
     def get_expected_devices(self):
         """returns a list of strings with the devices which are expected with this measurement"""
-        dc = self.__get()
+        dc = self.get()
         return json.loads(dc['devices_json'])
 
 
@@ -291,10 +272,7 @@ class Experiment(__RimObj):
                 }
             }
 
-        response = requests.post(self.uri + '/upload_measurement_data', json=payload, files=files)
-        response.raise_for_status()
-
-        dc = response.json()
+        dc = self.post('upload_measurement_data', json=payload, files=files)
         return dc['path'], dc['id'], dc['aux_files'] 
 
     def get_path_for_new_datafile(self, devices_to_add = {'ACU': '.csv'}, start_time=None, tag=None):
@@ -360,12 +338,8 @@ class Experiment(__RimObj):
                 'tags': tag
                 }
             }
-        
-        response = requests.post(self.uri + '/register_measurement_data', json=payload)
-        response.raise_for_status()
 
-        dc = response.json()
-
+        dc = self.post('register_measurement_data', json=payload)
         return dc['path'], dc['id'], dc['aux_files'] 
 
 
@@ -410,10 +384,7 @@ class Experiment(__RimObj):
             'extensions': extensions
             }
 
-        response = requests.post(self.uri + '/register_exp_aux_files', json=payload)
-        response.raise_for_status()
-        dc = response.json()
-
+        dc = self.post('register_exp_aux_files', json=payload)
         return dc['aux_files'] 
 
 
@@ -448,14 +419,11 @@ class Experiment(__RimObj):
             'id': self.exp.id, 
             }
 
-        response = requests.post(self.uri + '/upload_exp_aux_files', json=payload, files=files)
-        response.raise_for_status()
-        dc = response.json()
-
+        dc = self.post('upload_exp_aux_files', json=payload, files=files)
         return dc['aux_files'] 
 
 
-class Analysis(__RimObj):
+class Analysis(BaseRimObj):
     """An interface object to get access to analyses in the 
     database."""
     __tablename = 'analyses'
